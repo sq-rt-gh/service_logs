@@ -9,13 +9,36 @@ namespace SafeBoard2023_service_logs
      {
         static void Main()
         {
-            Console.Write("Directory: ");
-            string dir = Console.ReadLine();
-            if (!Directory.Exists(dir))
+            string cmd;
+            Console.Write("Type 'help' to show all commands \n>");
+
+            while ((cmd = Console.ReadLine()) != "exit")
             {
-                Console.WriteLine("This directory does not exists.");
-                return;
-            }
+                if (string.IsNullOrWhiteSpace(cmd))
+                {
+                    Console.Write(">"); 
+                    continue;
+                }
+
+                switch (cmd.Trim().ToLower())
+                {
+                    case "help":
+                        Console.WriteLine("Available commands: ");
+                        Console.WriteLine("new - create new process");
+                        Console.WriteLine("get - get info about process");
+                        Console.WriteLine("status - show status of all processes");
+                        Console.WriteLine("notify - Disable/enable notifications about finished processes");
+                        Console.WriteLine("exit - exit program");
+                        break;
+
+                    case "new":
+                        Console.Write("Directory: ");
+                        string dir = Console.ReadLine();
+                        if (!Directory.Exists(dir))
+                        {
+                            Console.WriteLine("Directory does not exists.");
+                            break;
+                        }
 
             Console.Write("Search: ");
             string search = Console.ReadLine();
