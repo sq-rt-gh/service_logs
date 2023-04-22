@@ -84,6 +84,8 @@ namespace SafeBoard2023_service_logs
                         {
                             if (item.Value is UnfinishedReport)
                                 Console.WriteLine($"#{item.Key} - running");
+                            else if (item.Value is ErrorReport)
+                                Console.WriteLine($"#{item.Key} - finished with an error");
                             else
                                 Console.WriteLine($"#{item.Key} - finished");
                         }
@@ -105,7 +107,8 @@ namespace SafeBoard2023_service_logs
 
             Console.WriteLine("Process started with id: " + id);
 
-            await Task.Delay(15000); //иммитация долгой работы
+            //await Task.Delay(15000); //иммитация долгой работы
+            
             IPrintable report;
             try
             {
