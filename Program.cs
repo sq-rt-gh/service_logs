@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace SafeBoard2023_service_logs
 {
     internal class Program
-     {
+    {
         static int Id = 0;
         static bool Notify = true;
         static Dictionary<int, IPrintable> Dict = new Dictionary<int, IPrintable>();
@@ -21,7 +21,7 @@ namespace SafeBoard2023_service_logs
             {
                 if (string.IsNullOrWhiteSpace(cmd))
                 {
-                    Console.Write(">"); 
+                    Console.Write(">");
                     continue;
                 }
 
@@ -48,12 +48,21 @@ namespace SafeBoard2023_service_logs
                         Console.Write("Search for: ");
                         string search = Console.ReadLine();
 
-                        AnalyzeServicesAsync(dir, search, Id++);
+                        _ = AnalyzeServicesAsync(dir, search, Id++);
                         break;
 
                     case "get":
                         Console.Write("Process id: ");
-                        int id = Convert.ToInt32(Console.ReadLine());
+                        int id;
+                        try 
+                        { 
+                            id = Convert.ToInt32(Console.ReadLine().Trim());
+                        }
+                        catch
+                        {
+                            Console.WriteLine("Incorrect argument");
+                            break;
+                        }
                         if (Dict.ContainsKey(id))
                             Dict[id].Print();
                         else
@@ -90,31 +99,52 @@ namespace SafeBoard2023_service_logs
 
         }
 
-        static Task<ServiceReportList> AnalyzeServices(string dir, string search) 
+        async static Task AnalyzeServicesAsync(string dir, string search, int id)
         {
-            // получаем имена сервисов из каталога dir, которые удовлетворяют условию поиска search
-            List<string> services = new List<string>();
+            Dict.Add(id, new UnfinishedReport(dir, search));
+
+            Console.WriteLine("Process started with id: " + id);
+
+            await Task.Delay(15000); //иммитация долгой работы
+            IPrintable report;
             try
             {
-                foreach (string file in Directory.EnumerateFiles(dir))
+                report = await AnalyzeServices(dir, search);
+            }
+            catch (Exception e)
+            {
+                report = new ErrorReport(e);
+            }
+
+            Dict[id] = report;
+
+            if (Notify)
+            {
+                int l = Console.CursorLeft;
+                int t = Console.CursorTop;
+                Console.WriteLine($"\t\tproсess #{id} finished.");
+                Console.SetCursorPosition(l, t);
+            }
+        }
+
+        static Task<ServiceReportList> AnalyzeServices(string dir, string search) // получаем имена сервисов из каталога dir, которые удовлетворяют условию поиска search
+        {
+            List<string> services = new List<string>();
+
+            foreach (string file in Directory.EnumerateFiles(dir))
+            {
+                string serviceName = Regex.Match(file, @"\\\w+\.log$").Value; // ищем файлы без ротации и извлекаем имя сервиса
+                if (serviceName == "")
+                    continue;
+
+                serviceName = serviceName.Substring(1, serviceName.Length - 5); //отсечение слеша и расширения файла
+
+                if (Regex.IsMatch(serviceName, search))
                 {
-                    string serviceName = Regex.Match(file, @"\\\w+\.log$").Value; // ищем файлы без ротации и извлекаем имя сервиса
-                    if (serviceName == "")
-                        continue;
-
-                    serviceName = serviceName.Substring(1, serviceName.Length - 5); //отсечение слеша и расширения файла
-
-                    if (Regex.IsMatch(serviceName, search))
-                    {
-                        services.Add(serviceName);
-                    }
-                } 
+                    services.Add(serviceName);
+                }
             }
-            catch(Exception ex) 
-            { 
-                Console.WriteLine("Error: " + ex.Message); 
-            }
-
+            
             List<ServiceReport> list = new List<ServiceReport>(services.Count);
             foreach (string service in services)
             {
@@ -122,7 +152,7 @@ namespace SafeBoard2023_service_logs
 
                 using (StreamReader sr = new StreamReader($@"{dir}\{service}.log")) //считывание данных из файла без ротации
                 {
-                    serviceReport.ReadFile(sr); 
+                    serviceReport.ReadFile(sr);
                 }
 
                 for (int i = 1; ; i++) //считывание данных из файлов с ротацией
@@ -140,7 +170,7 @@ namespace SafeBoard2023_service_logs
                         serviceReport.Rotations = i - 1;
                         break;
                     }
-                    
+
                 }
 
                 list.Add(serviceReport);
@@ -149,25 +179,5 @@ namespace SafeBoard2023_service_logs
             return Task.FromResult(new ServiceReportList(list));
         }
 
-        async static Task AnalyzeServicesAsync(string dir, string search, int id)
-        {
-            Dict.Add(id, new UnfinishedReport(dir, search));
-
-            Console.WriteLine("Process started with id: " + id);
-
-            await Task.Delay(9000);
-            var report = await AnalyzeServices(dir, search);
-
-            Dict[id] = report;
-
-            if (Notify)
-            {
-                int l = Console.CursorLeft;
-                int t = Console.CursorTop;
-                Console.WriteLine($"\t\tproсess #{id} finished.");
-                Console.SetCursorPosition(l, t);
-            }
-        }
-
-     }
+    }
 }

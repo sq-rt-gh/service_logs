@@ -17,10 +17,7 @@ namespace SafeBoard2023_service_logs
         public Dictionary<string, int> Categories = new Dictionary<string, int>();
         public int Rotations = 0;
 
-        public ServiceReport(string name) 
-        {
-            Name = name;
-        }
+        public ServiceReport(string name) => Name = name;
 
         public void ReadFile(StreamReader sr) // дополнение объекта данными из файла
         {
@@ -40,7 +37,7 @@ namespace SafeBoard2023_service_logs
                 ind += 2; //начальный индекс категории
                 string cat = line.Substring(ind, line.IndexOf(']', ind) - ind);
 
-                if(Categories.ContainsKey(cat))
+                if (Categories.ContainsKey(cat))
                     Categories[cat] += 1;
                 else
                     Categories.Add(cat, 1);
@@ -75,10 +72,7 @@ namespace SafeBoard2023_service_logs
     {
         public List<ServiceReport> List;
 
-        public ServiceReportList(List<ServiceReport> l)
-        {
-            List = l;
-        }
+        public ServiceReportList(List<ServiceReport> l) => List = l;
 
         public void Print()
         {
@@ -91,6 +85,7 @@ namespace SafeBoard2023_service_logs
                 Console.WriteLine("\n========================================\n");
                 item.Print();
             }
+            Console.WriteLine("\n========================================\n");
         }
     }
 
@@ -108,7 +103,20 @@ namespace SafeBoard2023_service_logs
         public void Print()
         {
             Console.WriteLine("Status: In progress");
-            Console.WriteLine($"Searching files \"{FileMask}\" in {Dir}");
+            Console.WriteLine($"Searching files \"{FileMask}\" in \"{Dir}\"");
+        }
+    }
+
+    class ErrorReport : IPrintable
+    {
+        public Exception Exception;
+
+        public ErrorReport(Exception e) => Exception = e;
+
+        public void Print()
+        {
+            Console.WriteLine("Error:");
+            Console.WriteLine(Exception.Message);
         }
     }
 }
