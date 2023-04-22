@@ -2,67 +2,160 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace SafeBoard2023_service_logs
 {
-     internal class Program
-     {
+    internal class Program
+    {
+        static int Id = 0;
+        static bool Notify = true;
+        static Dictionary<int, IPrintable> Dict = new Dictionary<int, IPrintable>();
+
         static void Main()
         {
-            Console.Write("Directory: ");
-            string dir = Console.ReadLine();
-            if (!Directory.Exists(dir))
+            string cmd;
+            Console.Write("Type 'help' to show all commands \n>");
+
+            while ((cmd = Console.ReadLine()) != "exit")
             {
-                Console.WriteLine("This directory does not exists.");
-                return;
+                if (string.IsNullOrWhiteSpace(cmd))
+                {
+                    Console.Write(">");
+                    continue;
+                }
+
+                switch (cmd.Trim().ToLower())
+                {
+                    case "help":
+                        Console.WriteLine("Available commands: ");
+                        Console.WriteLine("new - create new process");
+                        Console.WriteLine("get - get info about process");
+                        Console.WriteLine("status - show status of all processes");
+                        Console.WriteLine("notify - Disable/enable notifications about finished processes");
+                        Console.WriteLine("exit - exit program");
+                        break;
+
+                    case "new":
+                        Console.Write("Directory: ");
+                        string dir = Console.ReadLine();
+                        if (!Directory.Exists(dir))
+                        {
+                            Console.WriteLine("Directory does not exists.");
+                            break;
+                        }
+
+                        Console.Write("Search for: ");
+                        string search = Console.ReadLine();
+
+                        _ = AnalyzeServicesAsync(dir, search, Id++);
+                        break;
+
+                    case "get":
+                        Console.Write("Process id: ");
+                        int id;
+                        try 
+                        { 
+                            id = Convert.ToInt32(Console.ReadLine().Trim());
+                        }
+                        catch
+                        {
+                            Console.WriteLine("Incorrect argument");
+                            break;
+                        }
+                        if (Dict.ContainsKey(id))
+                            Dict[id].Print();
+                        else
+                            Console.WriteLine($"Id {id} does not exists.");
+                        break;
+
+                    case "notify":
+                        Notify = !Notify;
+                        Console.WriteLine("Notifications " + (Notify ? "enabled" : "disabled"));
+                        break;
+
+                    case "status":
+                        if (Dict.Count == 0)
+                        {
+                            Console.WriteLine("No active processes");
+                            break;
+                        }
+                        foreach (var item in Dict)
+                        {
+                            if (item.Value is UnfinishedReport)
+                                Console.WriteLine($"#{item.Key} - running");
+                            else if (item.Value is ErrorReport)
+                                Console.WriteLine($"#{item.Key} - finished with an error");
+                            else
+                                Console.WriteLine($"#{item.Key} - finished");
+                        }
+                        break;
+
+                    default:
+                        Console.WriteLine("Incorrect command");
+                        break;
+
+                }
+                Console.Write(">");
             }
 
-            Console.Write("Search: ");
-            string search = Console.ReadLine();
-
-            foreach (var item in AnalyzeServices(dir, search))
-            {
-                Console.WriteLine("\n========================================\n");
-                item.Print();
-            }
-
-
-            Console.ReadKey();
         }
 
-        static IEnumerable<ServiceReport> AnalyzeServices(string dir, string search) 
+        async static Task AnalyzeServicesAsync(string dir, string search, int id)
         {
-            // получаем имена сервисов из каталога dir, которые удовлетворяют условию поиска search
-            List<string> services = new List<string>();
+            Dict.Add(id, new UnfinishedReport(dir, search));
+
+            Console.WriteLine("Process started with id: " + id);
+
+            //await Task.Delay(15000); //иммитация долгой работы
+            
+            IPrintable report;
             try
             {
-                foreach (string file in Directory.EnumerateFiles(dir))
+                report = await AnalyzeServices(dir, search);
+            }
+            catch (Exception e)
+            {
+                report = new ErrorReport(e);
+            }
+
+            Dict[id] = report;
+
+            if (Notify)
+            {
+                int l = Console.CursorLeft;
+                int t = Console.CursorTop;
+                Console.WriteLine($"\t\tproсess #{id} finished.");
+                Console.SetCursorPosition(l, t);
+            }
+        }
+
+        static Task<ServiceReportList> AnalyzeServices(string dir, string search) // получаем имена сервисов из каталога dir, которые удовлетворяют условию поиска search
+        {
+            List<string> services = new List<string>();
+
+            foreach (string file in Directory.EnumerateFiles(dir))
+            {
+                string serviceName = Regex.Match(file, @"\\\w+\.log$").Value; // ищем файлы без ротации и извлекаем имя сервиса
+                if (serviceName == "")
+                    continue;
+
+                serviceName = serviceName.Substring(1, serviceName.Length - 5); //отсечение слеша и расширения файла
+
+                if (Regex.IsMatch(serviceName, search))
                 {
-                    string serviceName = Regex.Match(file, @"\\\w+\.log$").Value; // ищем файлы без ротации и извлекаем имя сервиса
-                    if (serviceName == "")
-                        continue;
-
-                    serviceName = serviceName.Substring(1, serviceName.Length - 5); //отсечение слеша и расширения файла
-
-                    if (Regex.IsMatch(serviceName, search))
-                    {
-                        services.Add(serviceName);
-                    }
-                } 
+                    services.Add(serviceName);
+                }
             }
-            catch(Exception ex) 
-            { 
-                Console.WriteLine("Error: " + ex.Message); 
-            }
-
-
+            
+            List<ServiceReport> list = new List<ServiceReport>(services.Count);
             foreach (string service in services)
             {
                 ServiceReport serviceReport = new ServiceReport(service);
 
                 using (StreamReader sr = new StreamReader($@"{dir}\{service}.log")) //считывание данных из файла без ротации
                 {
-                    serviceReport.ReadFile(sr); 
+                    serviceReport.ReadFile(sr);
                 }
 
                 for (int i = 1; ; i++) //считывание данных из файлов с ротацией
@@ -80,74 +173,14 @@ namespace SafeBoard2023_service_logs
                         serviceReport.Rotations = i - 1;
                         break;
                     }
-                    
+
                 }
 
-                yield return serviceReport;
-            } 
-        }
-
-     }
-    
-    class ServiceReport
-    {
-        public string Name;
-        public DateTime FirstLog = DateTime.MaxValue;
-        public DateTime LastLog = DateTime.MinValue;
-        public Dictionary<string, int> Categories = new Dictionary<string, int>();
-        public int Rotations = 0;
-
-        public ServiceReport(string name) 
-        {
-            Name = name;
-        }
-
-        public void ReadFile(StreamReader sr)
-        {
-            string line;
-            while ((line = sr.ReadLine()) != null)
-            {
-                if (line == "") continue;
-
-                // Извлекаем дату и время
-                int ind = line.IndexOf(']');
-                DateTime dt = DateTime.Parse(line.Substring(1, ind - 2));
-
-                if (dt < FirstLog) FirstLog = dt;
-                if (dt > LastLog) LastLog = dt;
-
-                // Извлекаем категорию
-                ind += 2; //начальный индекс категории
-                string cat = line.Substring(ind, line.IndexOf(']', ind) - ind);
-
-                if(Categories.ContainsKey(cat))
-                    Categories[cat] += 1;
-                else
-                    Categories.Add(cat, 1);
-
-            }
-        }
-
-        public void Print()
-        {
-            Console.WriteLine("Service: " + Name);
-
-            if (Categories.Count == 0) //если нет информации о логах, то нет смысла выводить остальную информацию
-            {
-                Console.WriteLine("\nNo logs were found for this service.");
-                return;
+                list.Add(serviceReport);
             }
 
-            Console.WriteLine($"\nFirst log: {FirstLog}.{FirstLog.Millisecond}");
-            Console.WriteLine($"Last log:  {LastLog}.{LastLog.Millisecond}\n");
-
-            Console.WriteLine("Log count in each category: ");
-            foreach (var item in Categories)
-            {
-                Console.WriteLine($"\t{item.Key} - {item.Value}");
-            }
-
-            Console.WriteLine("\nRotations: " + Rotations);
+            return Task.FromResult(new ServiceReportList(list));
         }
+
     }
 }
